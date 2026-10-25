@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document search</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 p-6 sm:p-10 font-sans min-h-screen">
+<div class="max-w-3xl mx-auto">
+    <!-- Header --->
+    <header class="mb-8">
+        <h1 class="text-3xl font-extrabold text-blue-400 tracking-tight">🔍 Document Search</h1>
+    </header>
+
+    <!-- Directory Configuration-->
+    <div class="mb-8 p-5 bg-slate-900 border border-slate-800 rounded-xl shadow-lg">
+        <label class="block text-sm font-semibold text-slate-300 mb-2">Target Directory:</label>
+        <div class="flex gap-3">
+            <input type="text" id="dirInput" placeholder="Enter directory"
+                   class="flex-1 p-3 bg-slate-950 border border-slate-800 rounded-lg focus:outline-none focus:border-blue-500 text-sm text-slate-100 placeholder-slate-600">
+            <button onclick="setDirectory()" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-3 rounded-lg font-medium text-sm transition shadow-md whitespace-nowrap">
+                Load Directory
+            </button>
+        </div>
+        <div id="statusMessage" class="text-xs text-slate-400 mt-3 font-medium"></div>
+    </div>
+
+    <!-- Search Input -->
+    <div class="mb-6">
+        <div class="relative">
+            <input type="text" id="searchInput" placeholder="Type a search query..."
+                   class="w-full p-4 bg-slate-900 border border-slate-800 rounded-xl focus:outline-none focus:border-blue-500 text-base text-slate-100 placeholder-slate-600 shadow-inner"
+                   oninput="triggerSearch()">
+        </div>
+    </div>
+
+    <!-- Results Area -->
+    <div id="resultsContainer" class="space-y-4">
+        <div class="text-slate-600 text-sm text-center py-10">
+            Enter a directory path above to index files, then type a search query.
+        </div>
+    </div>
+</div>
+
+<script>
+    let debounceTimer;
+    let currentAbortController = null; // Tracks active fetch request for cancellation
+    let activeSnippetMap = {};         // Tracks current snippet index per result card
+    let windowLastResults = [];        // Cache latest search results locally
+
+    async function setDirectory() {
+        const path = document.getElementById('dirInput').value.trim();
+        const statusMsg = document.getElementById('statusMessage');
+
+        if (!path) return;
+
+        statusMsg.textContent = "Indexing...";
+        statusMsg.className = "text-xs text-blue-400 mt-3 font-medium";
+
+        try {
+            const response = await fetch('/api/directory', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ directoryPath: path })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                statusMsg.textContent = "Error: " + (data.error || "Failed to start indexing.");
+                statusMsg.className = "text-xs text-red-400 mt-3 font-medium";
+                return;
+            }
+
+            const interval = setInterval(async () => {
+                try {
+                    const statusRes = await fetch('/api/status');
+                    const statusData = await statusRes.json();
+
+                    if (!statusData.isIndexing) {
+                        clearInterval(interval);
+                        statusMsg.textContent = "Indexing completed successfully!";
+                        statusMsg.className = "text-xs text-green-400 mt-3 font-medium";
+                    }
+                } catch (e) {
+                }
+            }, 500);
+
+        } catch (err) {
+            statusMsg.textContent = "Failed to connect to server.";
+            statusMsg.className = "text-xs text-red-400 mt-3 font-medium";
+        }
+    }
+
+    function triggerSearch() {
+        clearTimeout(debounceTimer);
+
+        debounceTimer = setTimeout(async () => {
+            const query = document.getElementById('searchInput').value.trim();
+            const container = document.getElementById('resultsContainer');
+
+            if (!query) {
+                container.innerHTML = `
+                    <div class="text-slate-600 text-sm text-center py-10">
+                        Type a search query above to see results.
+                    </div>`;
+                return;
+            }
+
+            // Abort any pending network requests from previous keystrokes
+            if (currentAbortController) {
+                currentAbortController.abort();
+            }
+            currentAbortController = new AbortController();
+
+            try {
+                const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, {
+                    signal: currentAbortController.signal
+                });
+
+                if (!response.ok) return;
+
+                const data = await response.json();
+
+                const results = data.matchResults || [];
+                windowLastResults = results;
+                activeSnippetMap = {}; // Reset state tracker
+                renderResults(results, container);
+
+            } catch (err) {
+                // Ignore AbortError when user types faster than requests complete
+                if (err.name !== 'AbortError') {
+                    console.error("Search failed:", err);
+                }
+            }
+        }, 300);
+    }
+
+    function renderResults(results, container) {
+        if (!results || results.length === 0) {
+            container.innerHTML = `
+                <div class="p-6 bg-slate-900 border border-slate-800 rounded-xl text-center text-slate-500 text-sm">
+                    No matching documents found.
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = results.map((res, resIndex) => {
+            activeSnippetMap[resIndex] = 0;
+            const snippets = res.snippets || [];
+            const lines = res.lines || [];
+            const hasMultiple = snippets.length > 1;
+
+            const currentSnippet = snippets[0] || "No snippet available.";
+            const currentLine = lines[0] !== undefined ? lines[0] : "";
+
+            return `
+                <div class="p-4 bg-slate-900 border border-slate-800 rounded-xl hover:border-slate-700 transition shadow-md">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-blue-400 font-mono text-sm font-semibold truncate max-w-[70%]">${escapeHtml(res.docPath)}</span>
+                        <span class="text-xs bg-slate-800 text-slate-300 px-2.5 py-1 rounded-full font-medium">Matches: ${res.matchCount}</span>
+                    </div>
+
+                    <p id="snippet-text-${resIndex}" class="text-slate-300 text-xs font-mono bg-slate-950 p-3 rounded-lg border border-slate-900 mt-2 overflow-x-auto">
+                        ${currentLine !== "" ? `<span class="text-slate-500 mr-2 font-semibold">Line ${currentLine}:</span>` : ""}"...${escapeHtml(currentSnippet)}..."
+                    </p>
+
+                    ${hasMultiple ? `
+                        <div class="flex justify-between items-center mt-3 text-xs text-slate-400">
+                            <span id="snippet-counter-${resIndex}" class="font-medium">Match 1 of ${snippets.length}</span>
+                            <div class="flex gap-2">
+                                <button onclick="navigateSnippet(${resIndex}, -1)" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded transition font-medium">Previous</button>
+                                <button onclick="navigateSnippet(${resIndex}, 1)" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded transition font-medium">Next</button>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }).join('');
+    }
+
+    function navigateSnippet(resIndex, direction) {
+        const results = windowLastResults;
+        if (!results || !results[resIndex]) return;
+
+        const snippets = results[resIndex].snippets;
+        const lines = results[resIndex].lines;
+        if (!snippets || snippets.length <= 1) return;
+
+        let currentIndex = activeSnippetMap[resIndex] || 0;
+        currentIndex += direction;
+
+        if (currentIndex < 0) currentIndex = snippets.length - 1;
+        if (currentIndex >= snippets.length) currentIndex = 0;
+
+        activeSnippetMap[resIndex] = currentIndex;
+
+        const snippetTextEl = document.getElementById(`snippet-text-${resIndex}`);
+        const counterEl = document.getElementById(`snippet-counter-${resIndex}`);
+
+        if (snippetTextEl) {
+            const lineNum = lines[currentIndex];
+            const linePrefix = lineNum !== undefined && lineNum !== "" ? `<span class="text-slate-500 mr-2 font-semibold">Line ${lineNum}:</span>` : "";
+            snippetTextEl.innerHTML = `${linePrefix}"...${escapeHtml(snippets[currentIndex])}..."`;
+        }
+        if (counterEl) {
+            counterEl.textContent = `Match ${currentIndex + 1} of ${snippets.length}`;
+        }
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.toString()
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+</script>
+</body>
+</html>
