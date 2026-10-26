@@ -16,6 +16,7 @@ public class SearchEngine {
     private final AtomicBoolean isIndexing = new AtomicBoolean(false);
     private final AtomicInteger activeTasks = new AtomicInteger(0);
     private Path searchDir;
+    private List<String> allowedFileTypes = new ArrayList<>();
     private ExecutorService service;
 
     public SearchResult search(String query) {
@@ -50,6 +51,14 @@ public class SearchEngine {
         this.searchDir = path;
     }
 
+    public void setAllowedFileTypes(List<String> fileTypes) {
+        if (fileTypes == null || fileTypes.isEmpty()) {
+            allowedFileTypes = List.of();
+        } else {
+            this.allowedFileTypes = List.copyOf(fileTypes);
+        }
+    }
+
     public void stopIndexing() {
         if (isIndexing.getAndSet(false)) {
             service.shutdownNow();
@@ -67,7 +76,8 @@ public class SearchEngine {
         try {
             Files.walk(searchDir)
                     .filter(Files::isRegularFile)
-                    .filter(p -> p.toString().endsWith(".txt") || p.toString().endsWith(".md"))
+                    .filter(p -> this.allowedFileTypes.isEmpty() ||
+                            this.allowedFileTypes.stream().anyMatch(type -> p.toString().endsWith(type)))
                     .forEach(filePath -> service.submit(
                             () -> {
                                 activeTasks.incrementAndGet();
@@ -81,7 +91,7 @@ public class SearchEngine {
                                 }
                             }));
         } catch (IOException e) {
-            System.err.println("An io exceptgio occurred.");
+            System.err.println("An io exception occurred.");
         }
     }
 }

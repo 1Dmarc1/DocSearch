@@ -16,13 +16,21 @@
     <!-- Directory Configuration-->
     <div class="mb-8 p-5 bg-slate-900 border border-slate-800 rounded-xl shadow-lg">
         <label class="block text-sm font-semibold text-slate-300 mb-2">Target Directory:</label>
-        <div class="flex gap-3">
-            <input type="text" id="dirInput" placeholder="Enter directory"
+        <div class="flex gap-3 mb-4">
+            <input type="text" id="dirInput" placeholder="Enter directory path..."
                    class="flex-1 p-3 bg-slate-950 border border-slate-800 rounded-lg focus:outline-none focus:border-blue-500 text-sm text-slate-100 placeholder-slate-600">
             <button onclick="setDirectory()" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-3 rounded-lg font-medium text-sm transition shadow-md whitespace-nowrap">
                 Load Directory
             </button>
         </div>
+
+        <!-- File Type Filter Input -->
+        <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1">Allowed File Types:</label>
+            <input type="text" id="fileTypesInput" placeholder="e.g. txt, md, log (leave blank for all)"
+                   class="w-full p-2.5 bg-slate-950 border border-slate-800 rounded-lg focus:outline-none focus:border-blue-500 text-xs text-slate-100 placeholder-slate-600">
+        </div>
+
         <div id="statusMessage" class="text-xs text-slate-400 mt-3 font-medium"></div>
     </div>
 
@@ -51,9 +59,15 @@
 
     async function setDirectory() {
         const path = document.getElementById('dirInput').value.trim();
+        const fileTypesRaw = document.getElementById('fileTypesInput').value.trim();
         const statusMsg = document.getElementById('statusMessage');
 
         if (!path) return;
+
+        // Parse comma-separated file types into array
+        const fileTypes = fileTypesRaw
+            ? fileTypesRaw.split(',').map(s => s.trim().replace(/^\./, '')).filter(Boolean)
+            : [];
 
         statusMsg.textContent = "Indexing...";
         statusMsg.className = "text-xs text-blue-400 mt-3 font-medium";
@@ -62,7 +76,10 @@
             const response = await fetch('/api/directory', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ directoryPath: path })
+                body: JSON.stringify({
+                    directoryPath: path,
+                    fileTypes: fileTypes
+                })
             });
 
             const data = await response.json();

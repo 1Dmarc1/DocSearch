@@ -26,6 +26,7 @@ public class SearchController {
         }
 
         searchEngine.setSearchDirectory(rootDir);
+        searchEngine.setAllowedFileTypes(request.fileTypes());
         searchEngine.startIndexing();
 
         ctx.status(200).json(Map.of("message", "Indexing..."));
@@ -47,7 +48,7 @@ public class SearchController {
     }
 }
 
-record SetDirectoryRequest(String directoryPath) {
+record SetDirectoryRequest(String directoryPath, List<String> fileTypes) {
 }
 
 record StatusResponse(boolean isIndexing) {

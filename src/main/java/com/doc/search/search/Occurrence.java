@@ -6,5 +6,4 @@ package com.doc.search.search;
  * @param lineByteOffset
  */
 public record Occurrence(int line, int lineByteOffset){
-
 }
