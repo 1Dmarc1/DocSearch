@@ -3,7 +3,7 @@ package com.doc.search.search;
 /**
  * Represents a single occurrence.
  * @param line
- * @param lineByteOffset
+ * @param tokenByteOffset
  */
-public record Occurrence(int line, int lineByteOffset){
+public record Occurrence(int line, int tokenByteOffset){
 }

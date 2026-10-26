@@ -38,9 +38,17 @@ public class FileIndexerTask implements Runnable {
                 }
 
                 List<String> tokens = Util.tokenize(line);
+                int searchStartIndex = 0;
                 for (String token : tokens) {
-                    wordMap.computeIfAbsent(token, _ -> new ArrayList<>())
-                            .add(new Occurrence(lineCount, (int) lineByteOffset));
+                    int tokenCharIndex = line.toLowerCase().indexOf(token, searchStartIndex);
+
+                    if (tokenCharIndex != -1) {
+                        long tokenByteOffset = lineByteOffset + tokenCharIndex;
+
+                        wordMap.computeIfAbsent(token, _ -> new ArrayList<>())
+                                .add(new Occurrence(lineCount, (int) tokenByteOffset));
+                        searchStartIndex = tokenCharIndex + token.length();
+                    }
                 }
                 lineCount++;
             }

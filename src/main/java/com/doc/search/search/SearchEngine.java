@@ -2,6 +2,8 @@ package com.doc.search.search;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -36,8 +38,10 @@ public class SearchEngine {
             for (Occurrence occurrence : match.occurrences()) {
                 String snippet;
                 try (RandomAccessFile file = new RandomAccessFile(match.docPath().toString(), "r")) {
-                    file.seek(occurrence.lineByteOffset());
-                    snippet = file.readLine();
+                    file.seek(Math.max(0, occurrence.tokenByteOffset() - 25));
+                    byte[] buffer = new byte[50];
+                    file.read(buffer);
+                    snippet = StandardCharsets.UTF_8.decode(ByteBuffer.wrap(buffer)).toString();;
                 } catch (IOException e) {
                     snippet = "Unable to read file.";
                 }
