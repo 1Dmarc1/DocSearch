@@ -7,7 +7,7 @@ import java.util.List;
  * Contains all match results for a document.
  * @param matchCount How many matches were found.
  * @param docPath The path of the document.
- * @param snippets
+ * @param snippets A short text snippet for each match.
  */
 public record MatchResult (int matchCount, Path docPath, List<String> snippets, List<Integer> lines) {
 }

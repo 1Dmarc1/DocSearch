@@ -4,6 +4,7 @@ import com.doc.search.Util;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,13 +26,13 @@ public class FileIndexerTask implements Runnable {
     public void run() {
         Map<String, List<Occurrence>> wordMap = new HashMap<>();
 
-        try (BufferedReader reader = Files.newBufferedReader(path)) {
+        try (RandomAccessFile file = new RandomAccessFile(path.toFile(), "r")) {
             int lineByteOffset = 0;
             int lineCount = 1;
 
             // Read the file line by line
             String line;
-            while ((line = reader.readLine()) != null){
+            while ((line = file.readLine()) != null){
                 List<String> tokens = Util.tokenize(line); // Split each line into tokens
 
                 for (String token : tokens) {
@@ -40,7 +41,7 @@ public class FileIndexerTask implements Runnable {
                     }
                     wordMap.get(token).add(new Occurrence(lineCount, lineByteOffset));
                 }
-                lineByteOffset += line.getBytes(StandardCharsets.UTF_8).length + 2;
+                lineByteOffset = (int) file.getFilePointer();
                 lineCount++;
             }
             // Add the result of this document to the index
@@ -49,6 +50,4 @@ public class FileIndexerTask implements Runnable {
             System.err.println("Failed to index file. " + e);
         }
     }
-
-
 }
