@@ -14,12 +14,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class SearchEngine {
     private SearchIndex index;
     private final AtomicBoolean isIndexing = new AtomicBoolean(false);
-    private final AtomicInteger activeTasks = new AtomicInteger(0);
+    private final AtomicInteger activeIndexingTasks = new AtomicInteger(0);
+    private final AtomicInteger activeSearchTasks = new AtomicInteger(0);
     private Path searchDir;
     private List<String> allowedFileTypes = new ArrayList<>();
     private ExecutorService service;
 
     public SearchResult search(String query) {
+        if (isIndexing.get()){
+            return new SearchResult(List.of()); // Dont allow searches during indexing
+        }
+
+        activeSearchTasks.incrementAndGet();
         List<IndexMatch> matches = index.search(query);
 
         List<MatchResult> results = new ArrayList<>();
@@ -40,6 +46,7 @@ public class SearchEngine {
             }
             results.add(new MatchResult(match.occurrences().size(), match.docPath(), snippets, lines));
         }
+        activeSearchTasks.decrementAndGet();
         return new SearchResult(results);
     }
 
@@ -61,8 +68,9 @@ public class SearchEngine {
 
     public void stopIndexing() {
         if (isIndexing.getAndSet(false)) {
+            System.out.println("Stopp indexing!");
             service.shutdownNow();
-            activeTasks.set(0);
+            activeIndexingTasks.set(0);
             service = null;
         }
     }
@@ -80,11 +88,11 @@ public class SearchEngine {
                             this.allowedFileTypes.stream().anyMatch(type -> p.toString().endsWith(type)))
                     .forEach(filePath -> service.submit(
                             () -> {
-                                activeTasks.incrementAndGet();
+                                activeIndexingTasks.incrementAndGet();
                                 try {
                                     new FileIndexerTask(filePath, index).run();
                                 } finally {
-                                    int active = activeTasks.decrementAndGet();
+                                    int active = activeIndexingTasks.decrementAndGet();
                                     if (active == 0) {
                                         isIndexing.set(false);
                                     }
